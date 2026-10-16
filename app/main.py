@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 from threading import Lock
+from collections import Counter
 
 import joblib
 from fastapi import FastAPI, HTTPException
@@ -154,3 +155,94 @@ def prediction_history():
 
     with open(history_file, "r", newline="", encoding="utf-8") as file:
         return list(csv.DictReader(file))
+
+
+@app.get("/monitoring")
+def monitoring():
+    history_file = "prediction_history.csv"
+
+    if not os.path.isfile(history_file):
+        return {
+            "total_predictions": 0,
+            "distribution": {},
+            "average_confidence": 0.0,
+            "confidence_trend": [],
+            "drift_detected": False,
+            "alert": "Not enough prediction history."
+        }
+
+    with open(history_file, "r", newline="", encoding="utf-8") as file:
+        records = list(csv.DictReader(file))
+
+    valid_records = []
+    for record in records:
+        try:
+            valid_records.append({
+                "timestamp": record["timestamp"],
+                "prediction": record["prediction"],
+                "confidence": float(record["confidence"])
+            })
+        except (KeyError, ValueError):
+            continue
+
+    total = len(valid_records)
+    distribution = dict(
+        Counter(record["prediction"] for record in valid_records)
+    )
+
+    average_confidence = (
+        sum(r["confidence"] for r in valid_records) / total
+        if total else 0.0
+    )
+
+    # Compare the latest 20 predictions against the preceding 20.
+    window_size = 20
+    drift_detected = False
+    alert = "Collecting prediction history."
+
+    if total >= window_size * 2:
+        baseline = valid_records[-2 * window_size:-window_size]
+        recent = valid_records[-window_size:]
+
+        baseline_counts = Counter(r["prediction"] for r in baseline)
+        recent_counts = Counter(r["prediction"] for r in recent)
+
+        classes = set(baseline_counts) | set(recent_counts)
+
+        # Total variation distance between prediction distributions.
+        distance = 0.5 * sum(
+            abs(
+                baseline_counts[c] / window_size
+                - recent_counts[c] / window_size
+            )
+            for c in classes
+        )
+
+        drift_detected = distance >= 0.35
+
+        alert = (
+            f"Possible prediction distribution shift detected "
+            f"(distance: {distance:.2f})."
+            if drift_detected
+            else f"No major distribution shift detected (distance: {distance:.2f})."
+        )
+
+    elif total >= window_size:
+        alert = "Collecting another 20 predictions for comparison."
+
+    confidence_trend = [
+        {
+            "timestamp": r["timestamp"],
+            "confidence": r["confidence"]
+        }
+        for r in valid_records[-50:]
+    ]
+
+    return {
+        "total_predictions": total,
+        "distribution": distribution,
+        "average_confidence": round(average_confidence, 4),
+        "confidence_trend": confidence_trend,
+        "drift_detected": drift_detected,
+        "alert": alert
+    }

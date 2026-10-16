@@ -580,3 +580,80 @@ try:
 
 except requests.RequestException:
     st.warning("API is unavailable. Please start the API.")
+
+
+# ==========================================
+# MODEL MONITORING
+# ==========================================
+st.divider()
+st.header("🔬 Model Performance Monitoring")
+
+try:
+    response = requests.get(
+        "http://127.0.0.1:8000/monitoring",
+        timeout=5
+    )
+    response.raise_for_status()
+    monitoring = response.json()
+
+    metric1, metric2, metric3 = st.columns(3)
+
+    with metric1:
+        st.metric(
+            "Recorded Predictions",
+            monitoring["total_predictions"]
+        )
+
+    with metric2:
+        st.metric(
+            "Average Confidence",
+            f'{monitoring["average_confidence"]:.1%}'
+        )
+
+    with metric3:
+        st.metric(
+            "Species Classes",
+            len(monitoring["distribution"])
+        )
+
+    st.subheader("Prediction Distribution")
+
+    distribution = monitoring["distribution"]
+
+    if distribution:
+        distribution_df = pd.DataFrame(
+            list(distribution.items()),
+            columns=["Species", "Predictions"]
+        ).set_index("Species")
+
+        st.bar_chart(distribution_df)
+    else:
+        st.info("Make predictions to start monitoring.")
+
+    st.subheader("Confidence Trend")
+
+    trend = monitoring["confidence_trend"]
+
+    if trend:
+        trend_df = pd.DataFrame(trend)
+        trend_df["timestamp"] = pd.to_datetime(
+            trend_df["timestamp"], errors="coerce"
+        )
+        trend_df = trend_df.dropna(subset=["timestamp"])
+        trend_df = trend_df.set_index("timestamp")
+
+        st.line_chart(trend_df["confidence"])
+    else:
+        st.info("Confidence trends will appear after predictions.")
+
+    st.subheader("Prediction Drift Alert")
+
+    if monitoring["drift_detected"]:
+        st.warning("⚠️ " + monitoring["alert"])
+    elif monitoring["total_predictions"] >= 40:
+        st.success("✅ " + monitoring["alert"])
+    else:
+        st.info("ℹ️ " + monitoring["alert"])
+
+except requests.RequestException as exc:
+    st.error(f"Monitoring API unavailable: {exc}")
