@@ -1,0 +1,8 @@
+
+@'
+.venv
+.git
+__pycache__
+.pytest_cache
+mlruns
+'@ | Set-Content -Encoding utf8 .dockerignore
