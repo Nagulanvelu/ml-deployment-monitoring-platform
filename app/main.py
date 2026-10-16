@@ -41,11 +41,13 @@ def home():
     }
 
 
+
 @app.get("/health")
 def health():
     return {
         "status": "healthy",
-        "model_loaded": model is not None
+        "model_loaded": model is not None,
+        "model_type": type(model).__name__ if model is not None else None,
     }
 
 
