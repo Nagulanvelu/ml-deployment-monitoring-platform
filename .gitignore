@@ -6,3 +6,4 @@ mlflow.db
 *.pyc
 artifacts/*.joblib
 artifacts/metrics.json
+prediction_history.csv
