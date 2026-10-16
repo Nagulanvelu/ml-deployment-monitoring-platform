@@ -1,3 +1,7 @@
+import csv
+import os
+from datetime import datetime
+
 from pathlib import Path
 from time import perf_counter
 from threading import Lock
@@ -51,6 +55,7 @@ def health():
     }
 
 
+
 @app.post("/predict")
 def predict(request: PredictionRequest):
     global request_count, error_count, total_latency_ms
@@ -81,12 +86,34 @@ def predict(request: PredictionRequest):
         prediction_id = int(model.predict(values)[0])
         probabilities = model.predict_proba(values)[0]
 
+        prediction = target_names[prediction_id]
+        confidence = round(float(max(probabilities)), 4)
+
+        # Save successful predictions to CSV
+        history_file = "prediction_history.csv"
+        file_exists = os.path.isfile(history_file)
+
+        with open(history_file, "a", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+
+            if not file_exists:
+                writer.writerow([
+                    "timestamp", "prediction", "class_id", "confidence"
+                ])
+
+            writer.writerow([
+                datetime.now().isoformat(timespec="seconds"),
+                prediction,
+                prediction_id,
+                confidence
+            ])
+
         success = True
 
         return {
-            "prediction": target_names[prediction_id],
+            "prediction": prediction,
             "class_id": prediction_id,
-            "confidence": round(float(max(probabilities)), 4)
+            "confidence": confidence
         }
 
     finally:
@@ -98,6 +125,7 @@ def predict(request: PredictionRequest):
 
             if not success:
                 error_count += 1
+
 
 
 @app.get("/metrics")
@@ -115,3 +143,14 @@ def metrics():
                 average_latency, 3
             )
         }
+
+
+@app.get("/history")
+def prediction_history():
+    history_file = "prediction_history.csv"
+
+    if not os.path.isfile(history_file):
+        return []
+
+    with open(history_file, "r", newline="", encoding="utf-8") as file:
+        return list(csv.DictReader(file))

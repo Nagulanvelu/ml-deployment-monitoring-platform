@@ -1,8 +1,11 @@
 
 import time
 
+import pandas as pd
 import requests
 import streamlit as st
+
+from streamlit_autorefresh import st_autorefresh
 
 # --------------------------------------------------
 # Configuration
@@ -210,16 +213,22 @@ st.markdown(
 # --------------------------------------------------
 # Refresh controls
 # --------------------------------------------------
-control_col, time_col = st.columns([1, 3])
+control_col, auto_col, time_col = st.columns([1, 1, 2])
 
 with control_col:
     if st.button("↻ Refresh dashboard", use_container_width=True):
         st.rerun()
 
+with auto_col:
+    auto_refresh = st.toggle("Auto-refresh (15s)", value=False)
+
 with time_col:
     st.caption(
         f"Last page refresh: {time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
+
+if auto_refresh:
+    st_autorefresh(interval=15_000, key="ml_metrics_refresh")
 
 
 # --------------------------------------------------
@@ -539,3 +548,35 @@ st.caption(
     "ML Deployment & Monitoring Platform • "
     "Streamlit frontend • FastAPI backend • Random Forest model"
 )
+
+
+# Prediction History
+st.subheader("📊 Prediction History")
+
+try:
+    response = requests.get(
+        "http://127.0.0.1:8000/history",
+        timeout=5
+    )
+
+    if response.status_code == 200:
+        history = response.json()
+
+        if history:
+            df = pd.DataFrame(history)
+
+            st.dataframe(
+                df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            if "prediction" in df.columns:
+                st.bar_chart(df["prediction"].value_counts())
+        else:
+            st.info("No prediction history available yet.")
+    else:
+        st.warning("Could not load prediction history.")
+
+except requests.RequestException:
+    st.warning("API is unavailable. Please start the API.")
