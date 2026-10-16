@@ -8,4 +8,6 @@ joblib
 mlflow
 pytest
 httpx
+streamlit
+requests
 
